@@ -1,3 +1,13 @@
+# jwt-auth-example
+
+A micronaut application demonstrating JWT validation on incoming HTTP requests
+
+Implements a simple Hello World GET endpoint that requires a valid JWT to access
+
+Expects the JWT to be signed with the HS256 algorithm 
+
+---
+
 ## Micronaut 3.8.2 Documentation
 
 - [User Guide](https://docs.micronaut.io/3.8.2/guide/index.html)
