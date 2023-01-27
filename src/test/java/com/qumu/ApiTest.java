@@ -1,5 +1,12 @@
 package com.qumu;
 
+import com.nimbusds.jose.JOSEException;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.JWSHeader;
+import com.nimbusds.jose.crypto.MACSigner;
+import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.SignedJWT;
+import io.micronaut.context.annotation.Value;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.HttpStatus;
@@ -9,6 +16,7 @@ import io.micronaut.http.client.exceptions.HttpClientResponseException;
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import org.assertj.core.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -16,16 +24,31 @@ import static org.assertj.core.api.Assertions.assertThat;
 @MicronautTest
 class ApiTest {
 
-    // Valid JWT signed with HS256 algorithm using secret `pleaseChangeThisSecretForANewOne`
-    private static final String VALID_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.6cD3MnZmX2xyEAWyh-GgGD11TX8SmvmHVLknuAIJ8yE";
+    @Value("${security.hs256.secret}")
+    String jwtSigningSecret;
+
+    SignedJWT signedJWT;
     @Inject
     @Client("/")
     HttpClient client;
 
+    /**
+     * Build a valid signed JWT for use in tests using secret provided in config
+     */
+    @BeforeEach
+    void setup() throws JOSEException {
+        MACSigner signer = new MACSigner(jwtSigningSecret);
+        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+                .subject("testUser")
+                .build();
+        signedJWT = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claims);
+        signedJWT.sign(signer);
+    }
+
     @Test
     void greetingGetEndpointRespondsToAuthorizedRequests() {
 
-        HttpResponse<String> response = client.toBlocking().exchange(HttpRequest.GET("/greeting").bearerAuth(VALID_TOKEN), String.class);
+        HttpResponse<String> response = client.toBlocking().exchange(HttpRequest.GET("/greeting").bearerAuth(signedJWT.serialize()), String.class);
         assertThat(response.code()).isEqualTo(HttpStatus.OK.getCode());
         assertThat(response.body()).isEqualTo("Hello World!");
     }

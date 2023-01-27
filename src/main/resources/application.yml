@@ -13,3 +13,6 @@ netty:
   default:
     allocator:
       max-order: 3
+security:
+  hs256:
+    secret: pleaseChangeThisSecretForANewOne
