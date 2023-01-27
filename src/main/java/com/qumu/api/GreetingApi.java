@@ -7,7 +7,7 @@ import io.micronaut.security.annotation.Secured;
 import io.micronaut.security.rules.SecurityRule;
 
 @Controller
-@Secured(SecurityRule.IS_ANONYMOUS)
+@Secured(SecurityRule.IS_AUTHENTICATED)
 public class GreetingApi {
 
     @Get(uri = "/greeting", produces = MediaType.TEXT_PLAIN)
