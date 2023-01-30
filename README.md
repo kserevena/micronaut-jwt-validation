@@ -6,6 +6,10 @@ Implements a simple Hello World GET endpoint that requires a valid JWT to access
 
 Expects the JWT to be signed with the HS256 algorithm 
 
+Demonstrates:
+* Use of JWTs to restrict access to an endpoint
+* Use of `roles` claim in JWT to restrict access to specific user types
+
 ---
 
 ## Micronaut 3.8.2 Documentation

@@ -61,23 +61,49 @@ class ApiTest {
 
     }
 
+    @Test
+    void greetingForKingGetAcceptsJwtWithKingRole() throws JOSEException {
+
+        HttpResponse<String> response = client.toBlocking().exchange(HttpRequest.GET("/greetingForKing").bearerAuth(validJwtWithRoles("king")), String.class);
+        assertThat(response.code()).isEqualTo(HttpStatus.OK.getCode());
+        assertThat(response.body()).isEqualTo("Hello Your Majesty!");
+    }
+
+    @Test
+    void greetingForKingGetRejectsJwtWithoutKingRole() {
+
+        assertThatException().isThrownBy(() -> client.toBlocking().exchange(HttpRequest.GET("/greetingForKing").bearerAuth(validJwtWithRoles("peasant")), String.class)).isInstanceOf(HttpClientResponseException.class).satisfies(e -> {
+            HttpClientResponseException castException = (HttpClientResponseException) e;
+            Assertions.assertThat((CharSequence) castException.getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+        });
+    }
+
     /**
      * Build a valid signed JWT for use in tests using secret provided in config
      *
      * @return valid signed JWT
      */
     private String validJwt() throws JOSEException {
-        return buildSignedJwt(false).serialize();
+        return buildSignedJwt(false, null).serialize();
     }
 
     /**
      * @return An expired JWT with valid signature
      */
     private String expiredJwt() throws JOSEException {
-        return buildSignedJwt(true).serialize();
+        return buildSignedJwt(true, null).serialize();
     }
 
-    private SignedJWT buildSignedJwt(boolean expired) throws JOSEException {
+    /**
+     * Build a valid signed JWT with a specified list of roles
+     *
+     * @param roles Space separated list of roles to put in JWT
+     */
+    private String validJwtWithRoles(String roles) throws JOSEException {
+        return buildSignedJwt(false, roles).serialize();
+    }
+
+    private SignedJWT buildSignedJwt(boolean expired, String role) throws JOSEException {
 
         Instant now = Instant.now();
         if (expired) {
@@ -90,6 +116,7 @@ class ApiTest {
         JWTClaimsSet claims = new JWTClaimsSet.Builder()
                 .subject("testUser")
                 .expirationTime(Date.from(now))
+                .claim("roles", role)
                 .build();
         SignedJWT signedJWT = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claims);
         signedJWT.sign(signer);
