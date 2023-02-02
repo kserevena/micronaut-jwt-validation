@@ -21,8 +21,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.Date;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatException;
+import static org.assertj.core.api.Assertions.*;
 
 @MicronautTest
 class ApiTest {
@@ -49,6 +48,16 @@ class ApiTest {
             HttpClientResponseException castException = (HttpClientResponseException) e;
             Assertions.assertThat((CharSequence) castException.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED);
         });
+    }
+
+    @Test
+    void greetingGetEndpointExtractsNameFromJwtIfPresent() throws JOSEException {
+
+        String test_name = "Frank";
+
+        HttpResponse<String> response = client.toBlocking().exchange(HttpRequest.GET("/greeting").bearerAuth(validJwtWithName(test_name)), String.class);
+        assertThat(response.code()).isEqualTo(HttpStatus.OK.getCode());
+        assertThat(response.body()).isEqualTo("Hello " + test_name + "!");
     }
 
     @Test
@@ -84,14 +93,14 @@ class ApiTest {
      * @return valid signed JWT
      */
     private String validJwt() throws JOSEException {
-        return buildSignedJwt(false, null).serialize();
+        return buildSignedJwt(false, null, null).serialize();
     }
 
     /**
      * @return An expired JWT with valid signature
      */
     private String expiredJwt() throws JOSEException {
-        return buildSignedJwt(true, null).serialize();
+        return buildSignedJwt(true, null, null).serialize();
     }
 
     /**
@@ -100,10 +109,14 @@ class ApiTest {
      * @param roles Space separated list of roles to put in JWT
      */
     private String validJwtWithRoles(String roles) throws JOSEException {
-        return buildSignedJwt(false, roles).serialize();
+        return buildSignedJwt(false, roles, null).serialize();
     }
 
-    private SignedJWT buildSignedJwt(boolean expired, String role) throws JOSEException {
+    private String validJwtWithName(String name) throws JOSEException {
+        return buildSignedJwt(false, null, name).serialize();
+    }
+
+    private SignedJWT buildSignedJwt(boolean expired, String role, String name) throws JOSEException {
 
         Instant now = Instant.now();
         if (expired) {
@@ -117,6 +130,7 @@ class ApiTest {
                 .subject("testUser")
                 .expirationTime(Date.from(now))
                 .claim("roles", role)
+                .claim("name", name)
                 .build();
         SignedJWT signedJWT = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claims);
         signedJWT.sign(signer);
