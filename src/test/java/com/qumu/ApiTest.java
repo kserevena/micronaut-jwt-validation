@@ -17,11 +17,14 @@ import io.micronaut.test.extensions.junit5.annotation.MicronautTest;
 import jakarta.inject.Inject;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.time.Instant;
 import java.util.Date;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatException;
 
 @MicronautTest
 class ApiTest {
@@ -33,90 +36,48 @@ class ApiTest {
     @Client("/")
     HttpClient client;
 
-    @Test
-    void greetingGetEndpointRespondsToAuthorizedRequests() throws JOSEException {
+    @ParameterizedTest(name = "{0}")
+    @CsvSource({
+            "/greeting GET: Default response is successful, /greeting, Hello World!, , ",
+            "/greeting GET: Name claim is used from JWT, /greeting, Hello Frank!, Frank, ",
+            "/greetingForKing GET: JWT with role of King defined is authenticated, /greetingForKing, Hello Your Majesty!, , king"
+    })
+    void getEndpointTestsForValidJwts(String testName, String testEndpoint, String expectedBody, String userName, String role) throws JOSEException {
 
-        HttpResponse<String> response = client.toBlocking().exchange(HttpRequest.GET("/greeting").bearerAuth(validJwt()), String.class);
+        String testJwt = buildSignedJwt(false, role, userName).serialize();
+
+        HttpResponse<String> response = client.toBlocking().exchange(HttpRequest.GET(testEndpoint).bearerAuth(testJwt), String.class);
         assertThat(response.code()).isEqualTo(HttpStatus.OK.getCode());
-        assertThat(response.body()).isEqualTo("Hello World!");
+        assertThat(response.body()).isEqualTo(expectedBody);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @CsvSource({
+            "/greeting GET: expired JWT returns `unauthorized` HTTP status, /greeting, true, creator , UNAUTHORIZED",
+            "/greetingForKing GET: rejects request without `king` role, /greetingForKing, false, peasant, FORBIDDEN"
+    })
+    void getEndpointTestsForInvalidSignedJwts(String testName, String testEndpoint, boolean expiredJwt, String roles, String expectedHttpStatus) throws JOSEException {
+
+        String testJwt = buildSignedJwt(expiredJwt, roles, null).serialize();
+
+        assertThatException().isThrownBy(() -> client.toBlocking().exchange(HttpRequest.GET(testEndpoint).bearerAuth(testJwt), String.class))
+                .isInstanceOf(HttpClientResponseException.class).satisfies(e -> {
+                    HttpClientResponseException castException = (HttpClientResponseException) e;
+                    Assertions.assertThat((CharSequence) castException.getStatus()).isEqualTo(HttpStatus.valueOf(expectedHttpStatus));
+                });
     }
 
     @Test
-    void greetingGetEndpointRejectsUnauthorizedRequests() {
+    void getEndpointRejectsUnsignedJunkJwt() {
 
-        assertThatException().isThrownBy(() -> client.toBlocking().exchange(HttpRequest.GET("/greeting").bearerAuth("a bad token"), String.class)).isInstanceOf(HttpClientResponseException.class).satisfies(e -> {
-            HttpClientResponseException castException = (HttpClientResponseException) e;
-            Assertions.assertThat((CharSequence) castException.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED);
-        });
+        assertThatException().isThrownBy(() -> client.toBlocking().exchange(HttpRequest.GET("/greeting").bearerAuth("junk jwt"), String.class))
+                .isInstanceOf(HttpClientResponseException.class).satisfies(e -> {
+                    HttpClientResponseException castException = (HttpClientResponseException) e;
+                    Assertions.assertThat((CharSequence) castException.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED);
+                });
     }
 
-    @Test
-    void greetingGetEndpointExtractsNameFromJwtIfPresent() throws JOSEException {
-
-        String test_name = "Frank";
-
-        HttpResponse<String> response = client.toBlocking().exchange(HttpRequest.GET("/greeting").bearerAuth(validJwtWithName(test_name)), String.class);
-        assertThat(response.code()).isEqualTo(HttpStatus.OK.getCode());
-        assertThat(response.body()).isEqualTo("Hello " + test_name + "!");
-    }
-
-    @Test
-    void greetingGetEndpointRejectsExpiredJwts() {
-
-        assertThatException().isThrownBy(() -> client.toBlocking().exchange(HttpRequest.GET("/greeting").bearerAuth(expiredJwt()), String.class)).isInstanceOf(HttpClientResponseException.class).satisfies(e -> {
-            HttpClientResponseException castException = (HttpClientResponseException) e;
-            Assertions.assertThat((CharSequence) castException.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED);
-        });
-
-    }
-
-    @Test
-    void greetingForKingGetAcceptsJwtWithKingRole() throws JOSEException {
-
-        HttpResponse<String> response = client.toBlocking().exchange(HttpRequest.GET("/greetingForKing").bearerAuth(validJwtWithRoles("king")), String.class);
-        assertThat(response.code()).isEqualTo(HttpStatus.OK.getCode());
-        assertThat(response.body()).isEqualTo("Hello Your Majesty!");
-    }
-
-    @Test
-    void greetingForKingGetRejectsJwtWithoutKingRole() {
-
-        assertThatException().isThrownBy(() -> client.toBlocking().exchange(HttpRequest.GET("/greetingForKing").bearerAuth(validJwtWithRoles("peasant")), String.class)).isInstanceOf(HttpClientResponseException.class).satisfies(e -> {
-            HttpClientResponseException castException = (HttpClientResponseException) e;
-            Assertions.assertThat((CharSequence) castException.getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
-        });
-    }
-
-    /**
-     * Build a valid signed JWT for use in tests using secret provided in config
-     *
-     * @return valid signed JWT
-     */
-    private String validJwt() throws JOSEException {
-        return buildSignedJwt(false, null, null).serialize();
-    }
-
-    /**
-     * @return An expired JWT with valid signature
-     */
-    private String expiredJwt() throws JOSEException {
-        return buildSignedJwt(true, null, null).serialize();
-    }
-
-    /**
-     * Build a valid signed JWT with a specified list of roles
-     *
-     * @param roles Space separated list of roles to put in JWT
-     */
-    private String validJwtWithRoles(String roles) throws JOSEException {
-        return buildSignedJwt(false, roles, null).serialize();
-    }
-
-    private String validJwtWithName(String name) throws JOSEException {
-        return buildSignedJwt(false, null, name).serialize();
-    }
-
-    private SignedJWT buildSignedJwt(boolean expired, String role, String name) throws JOSEException {
+    private SignedJWT buildSignedJwt(boolean expired, String roles, String name) throws JOSEException {
 
         Instant now = Instant.now();
         if (expired) {
@@ -129,7 +90,7 @@ class ApiTest {
         JWTClaimsSet claims = new JWTClaimsSet.Builder()
                 .subject("testUser")
                 .expirationTime(Date.from(now))
-                .claim("roles", role)
+                .claim("roles", roles)
                 .claim("name", name)
                 .build();
         SignedJWT signedJWT = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claims);
