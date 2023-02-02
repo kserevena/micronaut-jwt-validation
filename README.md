@@ -11,6 +11,14 @@ Demonstrates:
 * Use of `roles` claim in JWT to restrict access to specific user types
 * Accessing claims within a JWT when processing a request
 
+# Usage
+## Prerequisites:
+ * Java 17 or higher
+
+## Commands
+ * Run tests `./gradlew test`
+ * Build docker image to local docker installation: `./gradlew jibDockerBuild`
+
 ---
 
 ## Micronaut 3.8.2 Documentation
